@@ -5,28 +5,66 @@ import { useState } from 'react';
 export default function Home() {
   const [images, setImages] = useState([]);
 
+  // This function will be triggered on file input change
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files);
     const imagesWithTags = files.map(file => ({
+      file,
       name: file.name,
       size: file.size,
-      tags: [] // Las etiquetas ahora son un arreglo
+      tags: []
     }));
     setImages(imagesWithTags);
   };
 
+  // Convert a file to a Base64 string
+  const toBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
+
   const handleAddTag = (index, tag) => {
-    if (tag.trim() === '') return; // Evita agregar etiquetas vacías
+    if (tag.trim() === '') return; // Prevent adding empty tags
     const updatedImages = images.map((image, idx) => {
       if (idx === index) {
         return {
           ...image,
-          tags: [...image.tags, tag] // Agrega una nueva etiqueta al arreglo existente
+          tags: [...image.tags, tag]
         };
       }
       return image;
     });
     setImages(updatedImages);
+  };
+
+  // Modified to convert images to Base64 before uploading
+  const handleUploadToServer = async () => {
+    const payload = await Promise.all(images.map(async (image) => ({
+      name:image.name,
+      image: await toBase64(image.file),
+      tags: image.tags,
+    })));
+
+    try {
+      const response = await fetch('/api/images', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Upload successful:', result);
+    } catch (error) {
+      console.error('Error uploading files:', error);
+    }
   };
 
   return (
@@ -55,7 +93,7 @@ export default function Home() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   handleAddTag(index, e.target.value);
-                  e.target.value = ''; // Limpia el input después de agregar la etiqueta
+                  e.target.value = ''; // Clear input after adding tag
                 }
               }}
               placeholder="Presiona Enter para añadir tag"
@@ -63,7 +101,15 @@ export default function Home() {
             />
           </div>
         ))}
+        <button
+          onClick={handleUploadToServer}
+          disabled={images.length === 0}
+          className="mt-4 bg-blue-500 hover:bg-blue-700 disabled:bg-gray-400 disabled:hover:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded"
+        >
+          Upload Images
+        </button>
       </div>
     </div>
   );
 }
+
